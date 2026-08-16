@@ -41,11 +41,19 @@
                         </div>
                     </div>
                 </div>
-                <div class="text-right">
-                    <p class="text-xs font-black text-indigo-300 uppercase mb-1">Current Balance</p>
-                    <p class="text-4xl font-black {{ 'text-rose-300' if balance > 0 else 'text-emerald-300' }}">
-                        ৳ {{ "{:,.2f}".format(balance) }}
-                    </p>
+                <div class="text-right space-y-4">
+                    <div>
+                        <p class="text-xs font-black text-indigo-300 uppercase mb-1">Current Balance</p>
+                        <p class="text-4xl font-black {{ 'text-rose-300' if balance > 0 else 'text-emerald-300' }}">
+                            ৳ {{ "{:,.2f}".format(balance) }}
+                        </p>
+                    </div>
+                    <div>
+                        <p class="text-xs font-black text-indigo-300 uppercase mb-1">Due Amount</p>
+                        <p class="text-2xl font-black {{ 'text-rose-300' if due_amount > 0 else 'text-emerald-300' }}">
+                            ৳ {{ "{:,.2f}".format(due_amount) }}
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>

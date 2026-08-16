@@ -25,6 +25,26 @@ class Customer(db.Model):
     address = db.Column(db.Text)
     units = db.relationship('Unit', backref='resident', lazy=True)
 
+    @property
+    def total_service_charge_due(self):
+        from models import MonthlyBill
+        unpaid = MonthlyBill.query.filter(
+            MonthlyBill.customer_id == self.id,
+            MonthlyBill.status.in_(['unpaid', 'partial'])
+        ).all()
+        return sum(b.balance_due for b in unpaid)
+
+    @property
+    def total_service_charge_paid(self):
+        from models import MonthlyBill
+        bills = MonthlyBill.query.filter_by(customer_id=self.id).all()
+        return sum(b.paid_amount for b in bills)
+
+    @property
+    def service_charge_history(self):
+        from models import MonthlyBill
+        return MonthlyBill.query.filter_by(customer_id=self.id).order_by(MonthlyBill.year.desc(), MonthlyBill.month.desc()).all()
+
 class Account(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)

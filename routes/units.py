@@ -127,11 +127,22 @@ def customer_profile(id):
         credits = db.session.query(func.sum(LedgerEntry.credit)).filter_by(customer_id=id, account_id=ar_acc.id).scalar() or 0
         balance = debits - credits
         
+    # Calculate Due Amount (Service Charges receivable but not paid)
+    from models import MonthlyBill
+    due_amount = 0
+    unpaid_bills = MonthlyBill.query.filter(
+        MonthlyBill.customer_id == id,
+        MonthlyBill.status.in_(['unpaid', 'partial'])
+    ).all()
+    for bill in unpaid_bills:
+        due_amount += bill.balance_due
+        
     return render_template('customer_profile.html', 
                            customer=customer, 
                            history=history, 
                            balance=balance, 
                            opening_balance=opening_balance,
+                           due_amount=due_amount,
                            from_date=f_str, 
                            to_date=t_str)
 
@@ -246,9 +257,84 @@ def export_customer_ledger(id):
         adjusted_width = (max_length + 2)
         ws.column_dimensions[get_column_letter(column)].width = adjusted_width
 
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
+    excel_file = BytesIO()
+    wb.save(excel_file)
+    excel_file.seek(0)
     
-    filename = f"Ledger_{customer.name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.xlsx"
-    return send_file(output, as_attachment=True, download_name=filename, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    filename = f"Ledger_{customer.name.replace(' ', '_')}_{f_date.strftime('%Y%m%d')}_{t_date.strftime('%Y%m%d')}.xlsx"
+    return send_file(
+        excel_file,
+        as_attachment=True,
+        download_name=filename,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+
+@units_bp.route('/units/customer/<int:customer_id>/history/export')
+def export_history(customer_id):
+    customer = Customer.query.get_or_404(customer_id)
+    history = customer.service_charge_history
+    
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Billing History"
+    
+    ws.merge_cells('A1:F1')
+    ws['A1'] = "SERVICE CHARGE BILLING HISTORY"
+    ws['A1'].font = TITLE_FONT
+    ws['A1'].alignment = Alignment(horizontal='center')
+    
+    ws['A2'] = f"Resident: {customer.name}"
+    ws['A2'].font = Font(bold=True)
+    unit = customer.units[0] if customer.units else None
+    ws['A3'] = f"Unit: {unit.unit_number if unit else 'N/A'}"
+    ws['D3'] = f"Generated: {datetime.now().strftime('%d %b %Y %H:%M')}"
+    
+    headers = ['Month/Year', 'Due Date', 'Total Amount', 'Paid Amount', 'Due Balance', 'Status']
+    for col, text in enumerate(headers, 1):
+        cell = ws.cell(row=5, column=col)
+        cell.value = text
+        cell.fill = HEADER_FILL
+        cell.font = HEADER_FONT
+        cell.alignment = Alignment(horizontal='center')
+        cell.border = THIN_BORDER
+        
+    row = 6
+    months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    for bill in history:
+        ws.cell(row=row, column=1).value = f"{months[bill.month - 1]} {bill.year}"
+        ws.cell(row=row, column=2).value = bill.due_date.strftime('%d %b %Y')
+        ws.cell(row=row, column=3).value = bill.amount + bill.current_penalty
+        ws.cell(row=row, column=4).value = bill.paid_amount
+        ws.cell(row=row, column=5).value = bill.balance_due
+        ws.cell(row=row, column=6).value = bill.status.upper()
+        
+        for col in range(1, 7):
+            cell = ws.cell(row=row, column=col)
+            cell.border = THIN_BORDER
+            if col in [3, 4, 5]:
+                cell.number_format = '#,##0.00'
+        row += 1
+        
+    from openpyxl.utils import get_column_letter
+    for idx, col in enumerate(ws.columns, 1):
+        max_length = 0
+        column_letter = get_column_letter(idx)
+        for cell in col:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        ws.column_dimensions[column_letter].width = max_length + 2
+
+    excel_file = BytesIO()
+    wb.save(excel_file)
+    excel_file.seek(0)
+    
+    filename = f"Billing_History_{customer.name.replace(' ', '_')}.xlsx"
+    return send_file(
+        excel_file,
+        as_attachment=True,
+        download_name=filename,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )

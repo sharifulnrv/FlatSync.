@@ -40,7 +40,17 @@ def dashboard():
 
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
-    basis = request.args.get('basis', 'accrual')
+    basis = request.args.get('basis')
+
+    if not start_date_str and not end_date_str and not basis:
+        import calendar
+        today = datetime.today()
+        start_date_str = today.replace(day=1).strftime('%Y-%m-%d')
+        _, last_day = calendar.monthrange(today.year, today.month)
+        end_date_str = today.replace(day=last_day).strftime('%Y-%m-%d')
+        basis = 'cash'
+    else:
+        basis = basis or 'cash'
     
     query = JournalEntry.query
     
@@ -84,6 +94,26 @@ def dashboard():
         'payables': float(pay_bal),
         'net_balance': float(cash_bal + recv_bal - pay_bal)
     }
+
+    # Calculate Period Cash Flow
+    cash_flow_query = db.session.query(
+        func.sum(LedgerEntry.debit),
+        func.sum(LedgerEntry.credit)
+    ).join(JournalEntry).filter(
+        LedgerEntry.account_id.in_(cash_ids),
+        LedgerEntry.event_id == None
+    )
+    
+    if start_date_str:
+        cash_flow_query = cash_flow_query.filter(JournalEntry.date >= start_date)
+    if end_date_str:
+        cash_flow_query = cash_flow_query.filter(JournalEntry.date <= end_date)
+        
+    cash_in, cash_out = cash_flow_query.first()
+    summary['period_cash_in'] = float(cash_in or 0)
+    summary['period_cash_out'] = float(cash_out or 0)
+    summary['period_net_cash'] = float((cash_in or 0) - (cash_out or 0))
+    summary['has_period_filter'] = bool(start_date_str or end_date_str)
 
     return render_template('accounting_dashboard.html', 
                             grouped_accounts=grouped, 

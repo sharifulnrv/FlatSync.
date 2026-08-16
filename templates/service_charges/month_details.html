@@ -46,6 +46,15 @@
                                     {% endif %}
                                 </div>
                                 <p class="text-[9px] sm:text-[10px] text-gray-400 font-bold uppercase tracking-widest">Due: {{ bill.due_date.strftime('%d %b') }}</p>
+                                {% if bill.unit.resident %}
+                                <div class="flex flex-wrap gap-1 mt-1">
+                                    <span class="text-[8px] sm:text-[9px] bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded font-black" title="Total Unpaid Balance Across All Months">Total Due: ৳{{ "{:,.0f}".format(bill.unit.resident.total_service_charge_due) }}</span>
+                                    <span class="text-[8px] sm:text-[9px] bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded font-black" title="Total Amount Paid Across All Months">Total Paid: ৳{{ "{:,.0f}".format(bill.unit.resident.total_service_charge_paid) }}</span>
+                                    <button onclick="openHistoryModal('history-{{ bill.id }}')" class="text-[8px] sm:text-[9px] bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-1.5 py-0.5 rounded font-black transition-colors">
+                                        <i class="fas fa-list-alt mr-1"></i>Report
+                                    </button>
+                                </div>
+                                {% endif %}
                             </div>
                         </div>
                     </td>
@@ -395,6 +404,14 @@
     function closeManualPenaltyModal() {
         document.getElementById('manualPenaltyModal').classList.add('hidden');
     }
+    
+    function openHistoryModal(modalId) {
+        document.getElementById(modalId).classList.remove('hidden');
+    }
+    
+    function closeHistoryModal(modalId) {
+        document.getElementById(modalId).classList.add('hidden');
+    }
 </script>
 
 <!-- Manual Penalty Assignment Modal -->
@@ -431,4 +448,57 @@
         </form>
     </div>
 </div>
+
+<!-- History Modals -->
+{% for bill in bills %}
+{% if bill.unit.resident %}
+<div id="history-{{ bill.id }}" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col rounded-[2.5rem] shadow-2xl relative animate-in fade-in zoom-in duration-300">
+        <div class="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+            <div>
+                <h3 class="text-xl font-black text-gray-800">Billing History</h3>
+                <p class="text-xs text-indigo-500 font-bold uppercase tracking-widest mt-1">{{ bill.unit.resident.name }} (Unit {{ bill.unit.unit_number }})</p>
+            </div>
+            <button onclick="closeHistoryModal('history-{{ bill.id }}')" class="w-10 h-10 bg-white border border-gray-200 rounded-full flex items-center justify-center text-gray-400 hover:text-rose-500 hover:border-rose-200 transition-all shadow-sm">
+                <i class="fas fa-times text-lg"></i>
+            </button>
+        </div>
+        <div class="p-6 overflow-y-auto bg-slate-50/50">
+            <div class="space-y-3">
+                {% for hist_bill in bill.unit.resident.service_charge_history %}
+                <div class="bg-white border border-gray-100 rounded-2xl p-4 flex items-center justify-between hover:border-indigo-100 transition-colors shadow-sm">
+                    <div class="flex items-center space-x-4">
+                        <div class="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex flex-col items-center justify-center">
+                            <span class="text-[10px] font-black uppercase">{{ date(hist_bill.year, hist_bill.month, 1).strftime('%b') }}</span>
+                            <span class="text-xs font-black">{{ hist_bill.year }}</span>
+                        </div>
+                        <div>
+                            <p class="font-black text-gray-800">Service Charge</p>
+                            <p class="text-[9px] text-gray-400 font-bold uppercase tracking-widest">
+                                <i class="fas fa-calendar-times mr-1"></i>Due: {{ hist_bill.due_date.strftime('%d %b %Y') }}
+                            </p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-sm font-black text-gray-800">৳{{ "{:,.2f}".format(hist_bill.amount + hist_bill.current_penalty) }}</p>
+                        <p class="text-[9px] font-black uppercase tracking-widest mt-0.5
+                            {% if hist_bill.status == 'paid' %} text-emerald-500
+                            {% elif hist_bill.status == 'partial' %} text-orange-500
+                            {% else %} text-rose-500 {% endif %}">
+                            <i class="fas fa-circle text-[6px] mr-1 align-middle"></i>{{ hist_bill.status }}
+                            {% if hist_bill.balance_due > 0 %}
+                            (৳{{ "{:,.2f}".format(hist_bill.balance_due) }} Due)
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-center text-sm font-bold text-gray-400 uppercase tracking-widest py-8">No billing history found.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endfor %}
 {% endblock %}
